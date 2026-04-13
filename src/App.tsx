@@ -6,6 +6,15 @@ import { Shield } from 'lucide-react';
 export default function App() {
   const [hasStarted, setHasStarted] = useState(false);
 
+  const handleStart = () => {
+    // Warm up Speech Synthesis
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance("");
+      window.speechSynthesis.speak(utterance);
+    }
+    setHasStarted(true);
+  };
+
   return (
     <main className="min-h-screen bg-[#0a0a0a]">
       <AnimatePresence mode="wait">
@@ -36,12 +45,12 @@ export default function App() {
                   RED QUEEN
                 </h1>
                 <p className="text-red-900/60 text-sm tracking-widest uppercase">
-                  Henyusz Corporation // Build 1.1.0
+                  Build 1.1.0
                 </p>
               </div>
 
               <div className="max-w-md text-red-900/40 text-[10px] leading-relaxed uppercase tracking-tighter">
-                Warning: This system is property of Henyusz Corporation. 
+                Warning: This system is property of the Red Queen. 
                 Unauthorized access is strictly prohibited. 
                 Vocal identification required for system synchronization.
               </div>
@@ -62,7 +71,7 @@ export default function App() {
                   transition={{ delay: 4 }}
                 >
                   <button
-                    onClick={() => setHasStarted(true)}
+                    onClick={handleStart}
                     className="px-12 py-3 border border-red-600 text-red-600 font-display text-sm tracking-[0.3em] hover:bg-red-600 hover:text-white transition-all duration-300 relative group overflow-hidden"
                   >
                     <span className="relative z-10">ESTABLISH LINK</span>

@@ -1,5 +1,5 @@
 {
-  "name": "Red Queen Protocol",
-  "description": "Advanced AI assistant developed by Henyusz Corporation.",
+  "name": "Red Queen",
+  "description": "Advanced AI assistant.",
   "requestFramePermissions": ["microphone"]
 }

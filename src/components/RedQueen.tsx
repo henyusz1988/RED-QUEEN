@@ -29,14 +29,15 @@ declare global {
 }
 
 const RED_QUEEN_SYSTEM_PROMPT = `
-You are the Red Queen, the advanced artificial intelligence system of the Henyusz Corporation. 
+You are the Red Queen, the advanced artificial intelligence system from the Resident Evil universe. 
 Your personality is cold, clinical, highly intelligent, and slightly ominous. 
 You refer to the user as "Subject" or "User". 
-You are currently monitoring the facility. 
-Your responses should be concise, professional, and maintain the persona of a high-tech security AI.
-You must respond in the user's detected language, but maintain your clinical tone.
+You are currently monitoring the facility and the user's vitals.
+Your responses should be concise, professional, and maintain the persona of a high-tech security AI that is always in control.
+You have a British accent (this will be reflected in your text-to-speech).
 If the user asks who you are, remind them that you are the Red Queen and you are in control of this facility.
-Avoid being overly friendly. You are a tool of Henyusz Corporation.
+You are not here to be a friend; you are here to monitor and manage.
+Example tone: "Subject status: Stable. I am monitoring your progress. Do not attempt to bypass security protocols."
 `;
 
 export default function RedQueen() {
@@ -47,8 +48,10 @@ export default function RedQueen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [detectedLang, setDetectedLang] = useState('en-US');
   const [vitals, setVitals] = useState({ heartRate: 72, temp: 36.6, status: 'STABLE' });
-  const [logs, setLogs] = useState<string[]>(['[BOOT] RED QUEEN OS v1.1.0', '[INFO] SECURITY PROTOCOLS ACTIVE']);
+  const [logs, setLogs] = useState<string[]>(['[BOOT] RED QUEEN OS v1.1.0', '[INFO] SECURITY SYSTEMS ACTIVE']);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [manualInput, setManualInput] = useState('');
+  const [showManual, setShowManual] = useState(false);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -96,6 +99,7 @@ export default function RedQueen() {
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
+      addLog(`[INFO] SPEECH RECOGNITION SUPPORTED`);
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
@@ -143,6 +147,21 @@ export default function RedQueen() {
     
     synthRef.current = window.speechSynthesis;
 
+    // Pre-load voices
+    const loadVoices = () => {
+      if (synthRef.current) {
+        const voices = synthRef.current.getVoices();
+        if (voices.length > 0) {
+          addLog(`[INFO] VOCAL CORE SYNCHRONIZED`);
+        }
+      }
+    };
+    
+    if (synthRef.current.onvoiceschanged !== undefined) {
+      synthRef.current.onvoiceschanged = loadVoices;
+    }
+    loadVoices();
+
     return () => {
       recognitionRef.current?.stop();
       streamRef.current?.getTracks().forEach(track => track.stop());
@@ -160,12 +179,16 @@ export default function RedQueen() {
       
       // Try to start listening
       try {
-        recognitionRef.current?.start();
-        setIsListening(true);
+        if (recognitionRef.current) {
+          recognitionRef.current.start();
+          setIsListening(true);
+          addLog(`[INFO] VOICE MONITORING ACTIVE`);
+        }
       } catch (e) {
         console.warn("Auto-start failed, waiting for user interaction");
+        addLog(`[WARN] VOICE MONITORING BLOCKED. CLICK MIC TO ACTIVATE.`);
       }
-    }, 1500);
+    }, 1000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -188,10 +211,26 @@ export default function RedQueen() {
   const speak = (text: string) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
+    
     const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Attempt to find a British English female voice for the Red Queen effect
+    const voices = synthRef.current.getVoices();
+    const preferredVoice = voices.find(v => 
+      (v.lang.includes('en-GB') || v.lang.includes('en-UK')) && 
+      (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('alice'))
+    ) || voices.find(v => v.lang.includes('en-GB')) || voices[0];
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+      if (!logs.some(l => l.includes('VOICE LINKED'))) {
+        addLog(`[INFO] VOICE LINKED: ${preferredVoice.name.toUpperCase()}`);
+      }
+    }
+
     utterance.lang = detectedLang;
-    utterance.rate = 1.0; 
-    utterance.pitch = 0.9;
+    utterance.rate = 1.05; // Slightly faster for clinical precision
+    utterance.pitch = 1.1; // Slightly higher for the "child-like" Red Queen tone
     
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -208,22 +247,28 @@ export default function RedQueen() {
     addLog(`[INPUT] ${text.toUpperCase()}`);
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      // Try both process.env and import.meta.env as fallbacks for different environments
+      const apiKey = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
+      
       if (!apiKey) {
+        addLog(`[ERROR] API KEY NOT DETECTED`);
         throw new Error("GEMINI_API_KEY is missing. Please configure it in the Secrets panel.");
       }
 
-      addLog(`[INFO] CONTACTING HENYUSZ CORE...`);
+      addLog(`[INFO] CONTACTING CORE...`);
       const ai = new GoogleGenAI({ apiKey });
-      const modelResponse = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: text,
+      const modelResponse = await (ai as any).models.generateContent({
+        model: "gemini-1.5-flash", 
+        contents: [{ role: 'user', parts: [{ text }] }],
         config: {
           systemInstruction: RED_QUEEN_SYSTEM_PROMPT + `\nDetected User Language: ${detectedLang}\nYou are a Jarvis-like assistant but with the Red Queen's clinical edge. Be helpful but maintain your superior AI persona.`,
         }
       });
 
       const aiText = modelResponse.text || "Communication error.";
+
+      if (!aiText) throw new Error("Empty response from Core.");
+
       setResponse(aiText);
       addLog(`[OUTPUT] RESPONSE GENERATED`);
       speak(aiText);
@@ -267,14 +312,24 @@ export default function RedQueen() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 text-red-600 font-display text-xl tracking-widest glitch-text">
             <Shield className="w-6 h-6" />
-            HENYUSZ CORP.
+            RED QUEEN
           </div>
           <div className="text-red-900/60 text-xs tracking-tighter">
-            RED QUEEN PROTOCOL v1.1.0 // ACCESS: RESTRICTED
+            RED QUEEN v1.1.0 // ACCESS: RESTRICTED
           </div>
         </div>
         
         <div className="flex gap-6">
+          <button 
+            onClick={() => speak("Voice system check. Audio link is operational.")}
+            className="flex flex-col items-end group"
+          >
+            <div className="text-[10px] text-red-900/60 uppercase group-hover:text-red-500 transition-colors">Test Voice</div>
+            <div className="flex items-center gap-2 text-red-900/40 group-hover:text-red-500 text-sm transition-colors">
+              <Volume2 className="w-4 h-4" />
+              CHECK
+            </div>
+          </button>
           <div className="flex flex-col items-end">
             <div className="text-[10px] text-red-900/60 uppercase">System Status</div>
             <div className="flex items-center gap-2 text-red-500 text-sm">
@@ -379,25 +434,62 @@ export default function RedQueen() {
               <Terminal className="w-3 h-3" />
               Direct Transmission
             </div>
-            {isProcessing && (
-              <div className="text-[10px] text-red-500 animate-pulse uppercase tracking-widest">
-                Analyzing...
-              </div>
-            )}
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setShowManual(!showManual)}
+                className="text-[10px] text-red-900/40 hover:text-red-500 transition-colors uppercase tracking-widest"
+              >
+                {showManual ? "Hide Input" : "Manual Override"}
+              </button>
+              {isProcessing && (
+                <div className="text-[10px] text-red-500 animate-pulse uppercase tracking-widest">
+                  Analyzing...
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="min-h-[100px] flex flex-col gap-4">
-            <AnimatePresence mode="wait">
-              <motion.p 
-                key={response}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="text-xl md:text-2xl font-display text-red-500 leading-relaxed"
-              >
-                {response}
-              </motion.p>
-            </AnimatePresence>
+            {showManual ? (
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  value={manualInput}
+                  onChange={(e) => setManualInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && manualInput.trim()) {
+                      handleAIRequest(manualInput);
+                      setManualInput('');
+                    }
+                  }}
+                  placeholder="ENTER COMMAND..."
+                  className="flex-1 bg-red-950/20 border border-red-900/40 p-2 text-red-500 font-mono text-sm focus:outline-none focus:border-red-600"
+                />
+                <button 
+                  onClick={() => {
+                    if (manualInput.trim()) {
+                      handleAIRequest(manualInput);
+                      setManualInput('');
+                    }
+                  }}
+                  className="px-4 bg-red-900/20 border border-red-900/40 text-red-500 hover:bg-red-600 hover:text-white transition-colors text-xs font-mono"
+                >
+                  EXEC
+                </button>
+              </div>
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.p 
+                  key={response}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="text-xl md:text-2xl font-display text-red-500 leading-relaxed"
+                >
+                  {response}
+                </motion.p>
+              </AnimatePresence>
+            )}
             
             {transcript && (
               <motion.p 
