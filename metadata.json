@@ -1,5 +1,5 @@
 {
   "name": "Red Queen Protocol",
-  "description": "Advanced AI assistant inspired by Resident Evil, developed by Henyusz Corporation.",
+  "description": "Advanced AI assistant developed by Henyusz Corporation.",
   "requestFramePermissions": ["microphone"]
 }

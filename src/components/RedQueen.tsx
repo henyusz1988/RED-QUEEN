@@ -45,7 +45,7 @@ export default function RedQueen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [detectedLang, setDetectedLang] = useState('en-US');
   const [vitals, setVitals] = useState({ heartRate: 72, temp: 36.6, status: 'STABLE' });
-  const [logs, setLogs] = useState<string[]>(['[BOOT] RED QUEEN OS v4.2.0', '[INFO] SECURITY PROTOCOLS ACTIVE']);
+  const [logs, setLogs] = useState<string[]>(['[BOOT] RED QUEEN OS v1.1.0', '[INFO] SECURITY PROTOCOLS ACTIVE']);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -62,34 +62,69 @@ export default function RedQueen() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true; // Changed to true for continuous listening
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = detectedLang;
 
       recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        const text = event.results[0][0].transcript;
+        const text = event.results[event.results.length - 1][0].transcript;
         setTranscript(text);
         handleAIRequest(text);
       };
 
       recognitionRef.current.onerror = (err: any) => {
         console.error('Speech recognition error:', err);
-        setIsListening(false);
         addLog(`[ERROR] SPEECH RECOGNITION FAILURE: ${err.error}`);
         if (err.error === 'not-allowed') {
           setResponse("ACCESS DENIED. MICROPHONE PERMISSION REQUIRED.");
+          setIsListening(false);
         }
       };
 
       recognitionRef.current.onend = () => {
-        setIsListening(false);
+        // Restart if it was supposed to be listening
+        if (isListening) {
+          try {
+            recognitionRef.current?.start();
+          } catch (e) {
+            console.error("Failed to restart recognition:", e);
+            setIsListening(false);
+          }
+        }
       };
+
+      // Auto-start listening on mount
+      const startAuto = async () => {
+        try {
+          await recognitionRef.current?.start();
+          setIsListening(true);
+          addLog(`[INFO] AUTOMATIC MICROPHONE INITIALIZATION`);
+          
+          // Initial Greeting with small delay
+          setTimeout(() => {
+            const greeting = "System online. I am the Red Queen. I am monitoring your status, Subject. How may I assist you?";
+            setResponse(greeting);
+            speak(greeting);
+            addLog(`[INFO] SYSTEM ONLINE - GREETING ISSUED`);
+          }, 1000);
+        } catch (e) {
+          console.error("Auto-start failed:", e);
+          addLog(`[WARN] AUTO-START BLOCKED. MANUAL OVERRIDE REQUIRED.`);
+          setIsListening(false);
+        }
+      };
+      
+      startAuto();
     } else {
       addLog(`[ERROR] SPEECH RECOGNITION NOT SUPPORTED BY THIS BROWSER`);
       setResponse("SYSTEM LIMITATION: VOICE INPUT NOT SUPPORTED IN THIS ENVIRONMENT. PLEASE USE A COMPATIBLE BROWSER.");
     }
     
     synthRef.current = window.speechSynthesis;
+
+    return () => {
+      recognitionRef.current?.stop();
+    };
   }, [detectedLang]);
 
   // Simulated Vitals
@@ -119,11 +154,18 @@ export default function RedQueen() {
   };
 
   const handleAIRequest = async (text: string) => {
+    if (!text.trim()) return;
     setIsProcessing(true);
     addLog(`[INPUT] ${text.toUpperCase()}`);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is missing. Please configure it in the Secrets panel.");
+      }
+
+      addLog(`[INFO] CONTACTING HENYUSZ CORE...`);
+      const ai = new GoogleGenAI({ apiKey });
       const modelResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: text,
@@ -136,10 +178,11 @@ export default function RedQueen() {
       setResponse(aiText);
       addLog(`[OUTPUT] RESPONSE GENERATED`);
       speak(aiText);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Error:', error);
-      setResponse("SYSTEM ERROR: UNABLE TO PROCESS REQUEST.");
-      addLog(`[ERROR] AI PROCESSING FAILED`);
+      const errorMsg = error?.message || "UNKNOWN ERROR";
+      setResponse(`SYSTEM ERROR: ${errorMsg.toUpperCase()}`);
+      addLog(`[ERROR] AI PROCESSING FAILED: ${errorMsg}`);
     } finally {
       setIsProcessing(false);
     }
@@ -169,7 +212,7 @@ export default function RedQueen() {
             HENYUSZ CORP.
           </div>
           <div className="text-red-900/60 text-xs tracking-tighter">
-            RED QUEEN PROTOCOL v4.2.0 // ACCESS: RESTRICTED
+            RED QUEEN PROTOCOL v1.1.0 // ACCESS: RESTRICTED
           </div>
         </div>
         
